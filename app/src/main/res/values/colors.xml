@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="reflex_background">#FF0E1116</color>
+    <color name="reflex_primary">#FF1E5BFF</color>
+    <color name="reflex_on_primary">#FFFFFFFF</color>
+</resources>
