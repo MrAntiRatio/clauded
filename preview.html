@@ -19,244 +19,519 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--on);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    overscroll-behavior: none; user-select: none; -webkit-user-select: none; }
+    overscroll-behavior: none; user-select: none; -webkit-user-select: none;
+    touch-action: manipulation; }
   .device {
-    max-width: 420px; margin: 0 auto; height: 100dvh; display: flex; flex-direction: column;
+    max-width: 460px; margin: 0 auto; height: 100dvh; display: flex; flex-direction: column;
     padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
   }
-  header { padding: 16px 20px 8px; }
-  h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
-  .sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
-  .header-row { display: flex; align-items: center; justify-content: space-between; }
+  header { padding: 14px 20px 6px; display: flex; align-items: center; justify-content: space-between; }
+  h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
   .reset {
     background: transparent; border: 0; color: var(--primary);
     font-size: 14px; font-weight: 600; padding: 8px 10px; border-radius: 8px; cursor: pointer;
   }
   .reset:active { background: rgba(30,91,255,0.15); }
   .reset[hidden] { display: none; }
-  main { flex: 1; padding: 8px 16px; min-height: 0; }
-  .tap {
-    width: 100%; height: 100%; border-radius: 28px; display: flex; align-items: center;
-    justify-content: center; text-align: center; padding: 24px;
-    background: var(--primary); color: white; transition: background-color 0.12s ease;
-    cursor: pointer;
+
+  .modes { display: flex; gap: 6px; padding: 6px 16px 8px; }
+  .mode {
+    flex: 1; background: var(--surface); color: var(--on);
+    border: 0; padding: 10px 6px; border-radius: 12px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
   }
-  .tap.waiting { background: var(--red); }
-  .tap.go { background: var(--green); }
-  .tap.toosoon { background: var(--amber); color: #111; }
-  .tap.complete { background: var(--primary-dark); }
-  .title { font-size: 44px; font-weight: 800; letter-spacing: -0.02em; }
-  .title.big { font-size: 80px; }
-  .title.mid { font-size: 56px; }
-  .body { font-size: 16px; opacity: 0.9; margin-top: 12px; }
-  .summary { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .summary h2 { margin: 0 0 8px; font-size: 28px; font-weight: 800; }
-  .stat { font-size: 18px; }
-  .stat .v { font-size: 22px; font-weight: 700; margin-left: 8px; }
-  .stat.new .v { color: var(--amber); font-weight: 900; }
-  .badge { background: var(--amber); color: #111; font-weight: 900; font-size: 12px;
-    padding: 2px 6px; border-radius: 6px; margin-left: 6px; vertical-align: middle; }
-  .all-time { font-size: 13px; opacity: 0.7; margin-top: 6px; }
-  footer { padding: 14px 20px 20px; }
-  .label { color: var(--muted); font-size: 13px; font-weight: 600; margin: 8px 0 6px; }
-  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
-  .chip {
-    border: 1px solid rgba(255,255,255,0.15); background: transparent; color: var(--on);
-    padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 500; cursor: pointer;
+  .mode .desc { font-weight: 400; font-size: 10px; color: var(--muted); }
+  .mode.selected { background: var(--primary); color: white; }
+  .mode.selected .desc { color: rgba(255,255,255,0.85); }
+  .mode:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  main { flex: 1; padding: 8px 16px; min-height: 0; position: relative; }
+  .stage {
+    width: 100%; height: 100%; border-radius: 28px; overflow: hidden;
+    background: var(--surface); position: relative;
   }
-  .chip.selected { background: var(--primary); border-color: var(--primary); color: white; }
-  .chip:disabled { opacity: 0.5; cursor: not-allowed; }
-  .best { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .stage .center {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; flex-direction: column; gap: 10px;
+  }
+  .title { font-size: 42px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+  .title.big { font-size: 76px; }
+  .title.mid { font-size: 52px; }
+  .body { font-size: 15px; opacity: 0.85; max-width: 280px; }
+  .stage.tap-target { cursor: pointer; }
+  .stage.blue { background: var(--primary); color: white; }
+  .stage.red { background: var(--red); color: white; }
+  .stage.green { background: var(--green); color: white; }
+  .stage.amber { background: var(--amber); color: #111; }
+  .stage.dark { background: var(--primary-dark); color: white; }
+
+  .hud {
+    position: absolute; top: 10px; left: 14px; right: 14px;
+    display: flex; justify-content: space-between; font-size: 13px;
+    font-weight: 700; letter-spacing: 0.04em; pointer-events: none;
+    color: rgba(255,255,255,0.85);
+  }
+  .hud .pill {
+    background: rgba(0,0,0,0.25); padding: 4px 10px; border-radius: 999px;
+  }
+
+  .target {
+    position: absolute; border-radius: 999px; background: white;
+    transform: translate(-50%, -50%) scale(0.2);
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.18), 0 8px 24px rgba(0,0,0,0.35);
+    animation: pop 120ms ease-out forwards;
+  }
+  .target.hit { animation: bust 220ms ease-out forwards; pointer-events: none; }
+  @keyframes pop { to { transform: translate(-50%, -50%) scale(1); } }
+  @keyframes bust {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
+  }
+
+  .summary { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px; }
+  .summary h2 { margin: 0 0 4px; font-size: 26px; font-weight: 800; }
+  .row { display: flex; align-items: center; font-size: 16px; }
+  .row .v { font-weight: 800; margin-left: 8px; font-size: 20px; }
+  .row.new .v { color: var(--amber); }
+  .badge { background: var(--amber); color: #111; font-weight: 900; font-size: 11px;
+    padding: 2px 6px; border-radius: 6px; margin-left: 6px; }
+  .all-time { font-size: 12px; opacity: 0.7; margin-top: 6px; }
+  .start-cta { font-size: 16px; opacity: 0.9; margin-top: 10px; }
+
+  footer { padding: 8px 20px 18px; text-align: center; }
+  .best { color: var(--muted); font-size: 13px; min-height: 18px; }
 </style>
 </head>
 <body>
 <div class="device">
   <header>
-    <div class="header-row">
-      <h1>Reflex Timer</h1>
-      <button class="reset" id="reset" hidden>Reset</button>
-    </div>
-    <div class="sub" id="round-label">Round 1 of 5</div>
+    <h1>Reflex Timer</h1>
+    <button class="reset" id="reset" hidden>Reset</button>
   </header>
+
+  <nav class="modes" id="modes"></nav>
+
   <main>
-    <div class="tap" id="tap"></div>
+    <div class="stage" id="stage"></div>
   </main>
+
   <footer>
-    <div class="label">Difficulty</div>
-    <div class="chips" id="difficulty"></div>
-    <div class="label">Rounds per session</div>
-    <div class="chips" id="rounds"></div>
     <div class="best" id="best"></div>
   </footer>
 </div>
 
 <script>
-const DIFFICULTIES = {
-  EASY:   { name: "Easy",   min: 1500, max: 4500 },
-  NORMAL: { name: "Normal", min: 1000, max: 3500 },
-  HARD:   { name: "Hard",   min:  700, max: 2500 },
-  INSANE: { name: "Insane", min:  400, max: 1800 },
-};
-const ROUND_OPTIONS = [3, 5, 10];
-
-const state = {
-  difficulty: "NORMAL",
-  targetRounds: 5,
-  rounds: [],
-  phase: { kind: "idle" },
-  waitTimer: null,
-};
-
-function loadBest(diff) {
-  const r = Number(localStorage.getItem(`best_reaction_${diff}`)) || null;
-  const a = Number(localStorage.getItem(`best_average_${diff}`)) || null;
-  return { reaction: r || null, average: a || null };
-}
-function saveBest(diff, sessionBest, sessionAvg) {
-  const cur = loadBest(diff);
-  let newR = false, newA = false;
-  if (sessionBest != null && (cur.reaction == null || sessionBest < cur.reaction)) {
-    localStorage.setItem(`best_reaction_${diff}`, sessionBest); newR = true;
-  }
-  if (sessionAvg != null && (cur.average == null || sessionAvg < cur.average)) {
-    localStorage.setItem(`best_average_${diff}`, sessionAvg); newA = true;
-  }
-  return { newR, newA };
-}
-
-const tap = document.getElementById("tap");
+/* =========================================================
+   Game state & shared helpers
+   ========================================================= */
+const stage = document.getElementById("stage");
 const resetBtn = document.getElementById("reset");
-const roundLabel = document.getElementById("round-label");
 const bestEl = document.getElementById("best");
-const diffChips = document.getElementById("difficulty");
-const roundChips = document.getElementById("rounds");
+const modesEl = document.getElementById("modes");
 
-function renderChips() {
-  const controlsEnabled = ["idle", "toosoon", "session"].includes(state.phase.kind);
-  diffChips.innerHTML = "";
-  Object.entries(DIFFICULTIES).forEach(([key, d]) => {
+const MODES = {
+  REACTION: { name: "Reaction", desc: "Tap on green", best: "Avg RT" },
+  GONOGO:   { name: "Go / No-Go", desc: "Tap green · Ignore red", best: "Score" },
+  WHACK:    { name: "Whack", desc: "20s, tap pop-ups", best: "Hits" },
+};
+
+let currentMode = "REACTION";
+let game = null;   // active game instance
+
+function bestKey(mode) { return `rt_best_${mode}`; }
+function loadBest(mode) {
+  const raw = localStorage.getItem(bestKey(mode));
+  return raw ? JSON.parse(raw) : null;
+}
+function saveBest(mode, value, lowerIsBetter) {
+  const cur = loadBest(mode);
+  if (cur == null || (lowerIsBetter ? value < cur : value > cur)) {
+    localStorage.setItem(bestKey(mode), JSON.stringify(value));
+    return true;
+  }
+  return false;
+}
+
+function renderModes(disabled) {
+  modesEl.innerHTML = "";
+  Object.entries(MODES).forEach(([key, m]) => {
     const b = document.createElement("button");
-    b.className = "chip" + (state.difficulty === key ? " selected" : "");
-    b.textContent = d.name;
-    b.disabled = !controlsEnabled;
-    b.onclick = () => { if (controlsEnabled) { state.difficulty = key; resetSession(); render(); } };
-    diffChips.appendChild(b);
-  });
-  roundChips.innerHTML = "";
-  ROUND_OPTIONS.forEach(n => {
-    const b = document.createElement("button");
-    b.className = "chip" + (state.targetRounds === n ? " selected" : "");
-    b.textContent = n;
-    b.disabled = !controlsEnabled;
-    b.onclick = () => { if (controlsEnabled) { state.targetRounds = n; resetSession(); render(); } };
-    roundChips.appendChild(b);
+    b.className = "mode" + (currentMode === key ? " selected" : "");
+    b.innerHTML = `<div>${m.name}</div><div class="desc">${m.desc}</div>`;
+    b.disabled = !!disabled;
+    b.onclick = () => { if (!disabled) selectMode(key); };
+    modesEl.appendChild(b);
   });
 }
 
 function renderBestLine() {
-  const b = loadBest(state.difficulty);
-  if (b.reaction == null && b.average == null) { bestEl.textContent = ""; return; }
-  const parts = [];
-  if (b.reaction != null) parts.push(`reaction: ${b.reaction}ms`);
-  if (b.average  != null) parts.push(`avg: ${b.average}ms`);
-  bestEl.textContent = `Best (${DIFFICULTIES[state.difficulty].name}) — ${parts.join(" · ")}`;
+  const v = loadBest(currentMode);
+  if (v == null) { bestEl.textContent = ""; return; }
+  if (currentMode === "REACTION") bestEl.textContent = `Best (${MODES.REACTION.name}) — avg: ${v.avg}ms · best: ${v.best}ms`;
+  if (currentMode === "GONOGO")   bestEl.textContent = `Best (${MODES.GONOGO.name}) — score: ${v.score} (${v.hits}/${v.trials})`;
+  if (currentMode === "WHACK")    bestEl.textContent = `Best (${MODES.WHACK.name}) — hits: ${v.hits}`;
 }
 
-function render() {
-  tap.className = "tap";
-  const p = state.phase;
-  const idx = Math.min(state.rounds.length + 1, state.targetRounds);
-  roundLabel.textContent = `Round ${idx} of ${state.targetRounds}`;
-  resetBtn.hidden = p.kind === "idle" && state.rounds.length === 0;
-  renderChips();
+function setStage(html, classes = "", tapHandler = null) {
+  stage.className = "stage " + classes + (tapHandler ? " tap-target" : "");
+  stage.innerHTML = html;
+  stage.onpointerdown = tapHandler || null;
+}
+function showReset(show) { resetBtn.hidden = !show; }
+
+function centerCard(title, body, titleClass = "title") {
+  return `<div class="center"><div class="${titleClass}">${title}</div>${body ? `<div class="body">${body}</div>` : ""}</div>`;
+}
+
+function selectMode(key) {
+  if (currentMode === key) return;
+  currentMode = key;
+  if (game && game.cleanup) game.cleanup();
+  game = null;
+  renderModes(false);
   renderBestLine();
-
-  if (p.kind === "idle") {
-    tap.innerHTML = `<div><div class="title">Tap to start</div>
-      <div class="body">When the screen turns green, tap as fast as you can.</div></div>`;
-  } else if (p.kind === "waiting") {
-    tap.classList.add("waiting");
-    tap.innerHTML = `<div><div class="title">Wait for green…</div>
-      <div class="body">Don't tap yet!</div></div>`;
-  } else if (p.kind === "go") {
-    tap.classList.add("go");
-    tap.innerHTML = `<div><div class="title big">TAP!</div></div>`;
-  } else if (p.kind === "toosoon") {
-    tap.classList.add("toosoon");
-    tap.innerHTML = `<div><div class="title">Too soon!</div>
-      <div class="body">Tap to try this round again.</div></div>`;
-  } else if (p.kind === "round") {
-    tap.classList.add("complete");
-    tap.innerHTML = `<div><div class="title mid">${p.ms} ms</div>
-      <div class="body">Tap for next round</div></div>`;
-  } else if (p.kind === "session") {
-    tap.classList.add("complete");
-    const avg = p.average, best = p.best;
-    const all = loadBest(state.difficulty);
-    const allLine = (all.reaction != null || all.average != null)
-      ? `<div class="all-time">All-time best ${all.reaction != null ? `reaction: ${all.reaction}ms` : ""}${(all.reaction != null && all.average != null) ? " · " : ""}${all.average != null ? `avg: ${all.average}ms` : ""}</div>` : "";
-    tap.innerHTML = `<div class="summary"><h2>Session complete</h2>
-      <div class="stat ${p.newA ? "new" : ""}">Average:<span class="v">${avg != null ? avg + " ms" : "—"}</span>${p.newA ? '<span class="badge">NEW</span>' : ""}</div>
-      <div class="stat ${p.newR ? "new" : ""}">Best:<span class="v">${best != null ? best + " ms" : "—"}</span>${p.newR ? '<span class="badge">NEW</span>' : ""}</div>
-      ${allLine}<div class="body">Tap to play again</div></div>`;
-  }
+  startCurrentMode();
 }
 
-function cancelWait() { if (state.waitTimer) { clearTimeout(state.waitTimer); state.waitTimer = null; } }
+resetBtn.onclick = () => {
+  if (game && game.cleanup) game.cleanup();
+  game = null;
+  renderModes(false);
+  showReset(false);
+  startCurrentMode();
+};
 
-function startWaiting() {
-  cancelWait();
-  state.phase = { kind: "waiting" };
-  render();
-  const d = DIFFICULTIES[state.difficulty];
-  const delay = Math.floor(d.min + Math.random() * (d.max - d.min));
-  state.waitTimer = setTimeout(() => {
-    if (state.phase.kind === "waiting") {
-      state.phase = { kind: "go", start: performance.now() };
-      render();
+/* =========================================================
+   Mode 1: Reaction (classic)
+   ========================================================= */
+function startReaction() {
+  const TARGET = 5;
+  const state = { rounds: [], phase: "idle", waitTimer: null, goStart: 0 };
+
+  function cleanup() { if (state.waitTimer) clearTimeout(state.waitTimer); }
+  game = { cleanup };
+
+  function render() {
+    if (state.phase === "idle") {
+      setStage(centerCard("Tap to start", "5 rounds. When the screen turns green, tap as fast as you can."), "blue", onTap);
+      showReset(false);
+    } else if (state.phase === "waiting") {
+      setStage(centerCard("Wait for green…", "Don't tap yet!"), "red", onTap);
+      showReset(true);
+    } else if (state.phase === "go") {
+      setStage(centerCard("TAP!", null, "title big"), "green", onTap);
+      showReset(true);
+    } else if (state.phase === "toosoon") {
+      setStage(centerCard("Too soon!", "Tap to retry this round."), "amber", onTap);
+      showReset(true);
+    } else if (state.phase === "round") {
+      const sub = `Round ${state.rounds.length} of ${TARGET}. Tap for next.`;
+      setStage(centerCard(`${state.last} ms`, sub, "title mid"), "dark", onTap);
+      showReset(true);
+    } else if (state.phase === "done") {
+      const best = Math.min(...state.rounds);
+      const avg = Math.round(state.rounds.reduce((a,b)=>a+b,0) / state.rounds.length);
+      const prev = loadBest("REACTION");
+      const isNew = !prev || avg < prev.avg;
+      if (isNew) saveBest("REACTION", { avg, best }, true);
+      const allTime = loadBest("REACTION");
+      const html = `
+        <div class="summary">
+          <h2>Session complete</h2>
+          <div class="row ${isNew ? "new" : ""}">Average:<span class="v">${avg} ms</span>${isNew ? '<span class="badge">NEW</span>' : ""}</div>
+          <div class="row">Best round:<span class="v">${best} ms</span></div>
+          <div class="all-time">All-time best avg: ${allTime.avg}ms · single: ${allTime.best}ms</div>
+          <div class="start-cta">Tap to play again</div>
+        </div>`;
+      setStage(html, "dark", () => { game = null; startReaction(); });
+      showReset(true);
+      renderBestLine();
     }
-  }, delay);
-}
+  }
 
-function resetSession() {
-  cancelWait();
-  state.rounds = [];
-  state.phase = { kind: "idle" };
+  function onTap() {
+    if (state.phase === "idle" || state.phase === "toosoon") {
+      state.phase = "waiting"; render();
+      const delay = 800 + Math.random() * 2200;
+      state.waitTimer = setTimeout(() => {
+        if (state.phase === "waiting") { state.phase = "go"; state.goStart = performance.now(); render(); }
+      }, delay);
+    } else if (state.phase === "waiting") {
+      clearTimeout(state.waitTimer); state.phase = "toosoon"; render();
+    } else if (state.phase === "go") {
+      state.last = Math.round(performance.now() - state.goStart);
+      state.rounds.push(state.last);
+      state.phase = state.rounds.length >= TARGET ? "done" : "round";
+      render();
+    } else if (state.phase === "round") {
+      state.phase = "waiting"; render();
+      const delay = 800 + Math.random() * 2200;
+      state.waitTimer = setTimeout(() => {
+        if (state.phase === "waiting") { state.phase = "go"; state.goStart = performance.now(); render(); }
+      }, delay);
+    }
+  }
+
   render();
 }
 
-function finishSession() {
-  const best = Math.min(...state.rounds);
-  const average = Math.round(state.rounds.reduce((a,b) => a+b, 0) / state.rounds.length);
-  const { newR, newA } = saveBest(state.difficulty, best, average);
-  state.phase = { kind: "session", best, average, newR, newA };
+/* =========================================================
+   Mode 2: Go / No-Go
+   Green stimulus = tap. Red stimulus = DON'T tap.
+   12 trials. Score = +2 hits, -2 false alarms, -1 misses.
+   ========================================================= */
+function startGoNoGo() {
+  const TRIALS = 12;
+  const STIMULUS_MS = 900;
+  const ITI_MIN = 600, ITI_MAX = 1600;
+
+  const state = {
+    phase: "idle",         // idle | iti | stim | done
+    stimulus: null,        // "go" | "nogo"
+    trial: 0,
+    hits: 0, misses: 0, falseAlarms: 0, correctRejects: 0,
+    rts: [],
+    stimStart: 0,
+    timers: [],
+  };
+
+  function cleanup() { state.timers.forEach(clearTimeout); state.timers = []; }
+  game = { cleanup };
+
+  function schedule(fn, ms) { const id = setTimeout(fn, ms); state.timers.push(id); return id; }
+
+  function score() {
+    return state.hits * 2 - state.falseAlarms * 2 - state.misses;
+  }
+
+  function render() {
+    if (state.phase === "idle") {
+      setStage(centerCard("Go / No-Go",
+        "Green = tap fast. Red = DON'T tap.<br>12 trials. Tap to start."), "blue", onTap);
+      showReset(false); return;
+    }
+    if (state.phase === "iti") {
+      const hud = `<div class="hud"><span class="pill">Trial ${state.trial + 1}/${TRIALS}</span><span class="pill">Score ${score()}</span></div>`;
+      setStage(hud + centerCard("•", "Get ready…", "title big"), "dark", onTap);
+      showReset(true); return;
+    }
+    if (state.phase === "stim") {
+      const hud = `<div class="hud"><span class="pill">Trial ${state.trial + 1}/${TRIALS}</span><span class="pill">Score ${score()}</span></div>`;
+      if (state.stimulus === "go") setStage(hud + centerCard("GO", null, "title big"), "green", onTap);
+      else                          setStage(hud + centerCard("NO", null, "title big"), "red",   onTap);
+      showReset(true); return;
+    }
+    if (state.phase === "done") {
+      const s = score();
+      const trials = state.hits + state.misses + state.falseAlarms + state.correctRejects;
+      const isNew = saveBest("GONOGO", { score: s, hits: state.hits, trials }, false);
+      const avgRT = state.rts.length ? Math.round(state.rts.reduce((a,b)=>a+b,0)/state.rts.length) : "—";
+      const html = `
+        <div class="summary">
+          <h2>Done</h2>
+          <div class="row ${isNew ? "new" : ""}">Score:<span class="v">${s}</span>${isNew ? '<span class="badge">NEW</span>' : ""}</div>
+          <div class="row">Hits:<span class="v">${state.hits}</span></div>
+          <div class="row">False alarms:<span class="v">${state.falseAlarms}</span></div>
+          <div class="row">Misses:<span class="v">${state.misses}</span></div>
+          <div class="row">Avg RT:<span class="v">${avgRT}${avgRT === "—" ? "" : " ms"}</span></div>
+          <div class="start-cta">Tap to play again</div>
+        </div>`;
+      setStage(html, "dark", () => { game = null; startGoNoGo(); });
+      showReset(true); renderBestLine();
+    }
+  }
+
+  function nextTrial() {
+    if (state.trial >= TRIALS) { state.phase = "done"; render(); return; }
+    state.phase = "iti"; render();
+    const iti = ITI_MIN + Math.random() * (ITI_MAX - ITI_MIN);
+    schedule(() => {
+      state.stimulus = Math.random() < 0.7 ? "go" : "nogo";
+      state.phase = "stim";
+      state.stimStart = performance.now();
+      render();
+      schedule(() => {
+        if (state.phase !== "stim") return;
+        // Timeout for current stimulus
+        if (state.stimulus === "go") state.misses++;
+        else state.correctRejects++;
+        state.trial++;
+        nextTrial();
+      }, STIMULUS_MS);
+    }, iti);
+  }
+
+  function onTap() {
+    if (state.phase === "idle") { nextTrial(); return; }
+    if (state.phase === "iti") {
+      // tapping during ITI is a false alarm against current trial intent — treat as false alarm
+      state.falseAlarms++;
+      cleanup();
+      state.trial++;
+      nextTrial();
+      return;
+    }
+    if (state.phase === "stim") {
+      cleanup();
+      if (state.stimulus === "go") {
+        state.hits++;
+        state.rts.push(Math.round(performance.now() - state.stimStart));
+      } else {
+        state.falseAlarms++;
+      }
+      state.trial++;
+      nextTrial();
+    }
+  }
+
   render();
 }
 
-function onTap() {
-  const p = state.phase;
-  if (p.kind === "idle" || p.kind === "toosoon") { startWaiting(); return; }
-  if (p.kind === "waiting") {
-    cancelWait();
-    state.phase = { kind: "toosoon" };
-    render();
-    return;
+/* =========================================================
+   Mode 3: Whack
+   20s round, targets pop up at random positions in the stage.
+   Tap them before they expire. Score = hits.
+   ========================================================= */
+function startWhack() {
+  const DURATION_MS = 20000;
+  const SPAWN_START = 850;
+  const SPAWN_MIN = 380;
+  const LIFETIME_START = 1200;
+  const LIFETIME_MIN = 650;
+
+  const state = {
+    phase: "idle",   // idle | playing | done
+    hits: 0,
+    misses: 0,
+    startTime: 0,
+    spawnTimer: null,
+    endTimer: null,
+    hudTimer: null,
+    targets: new Set(),
+  };
+
+  function cleanup() {
+    clearTimeout(state.spawnTimer); clearTimeout(state.endTimer); clearInterval(state.hudTimer);
+    state.targets.forEach(t => t.cleanup && t.cleanup());
+    state.targets.clear();
   }
-  if (p.kind === "go") {
-    const ms = Math.round(performance.now() - p.start);
-    state.rounds.push(ms);
-    if (state.rounds.length >= state.targetRounds) finishSession();
-    else { state.phase = { kind: "round", ms }; render(); }
-    return;
+  game = { cleanup };
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function progress() { return Math.min(1, (performance.now() - state.startTime) / DURATION_MS); }
+
+  function paintHud() {
+    const remain = Math.max(0, DURATION_MS - (performance.now() - state.startTime));
+    const seconds = (remain / 1000).toFixed(1);
+    const hud = stage.querySelector(".hud");
+    if (hud) hud.innerHTML = `<span class="pill">${seconds}s</span><span class="pill">Hits ${state.hits}</span>`;
   }
-  if (p.kind === "round") { startWaiting(); return; }
-  if (p.kind === "session") { resetSession(); return; }
+
+  function spawnTarget() {
+    const rect = stage.getBoundingClientRect();
+    const margin = 50;
+    const x = margin + Math.random() * (rect.width - margin * 2);
+    const y = 70 + Math.random() * (rect.height - 120);
+    const size = 60 + Math.random() * 24;
+    const el = document.createElement("div");
+    el.className = "target";
+    el.style.left = x + "px";
+    el.style.top = y + "px";
+    el.style.width = size + "px";
+    el.style.height = size + "px";
+    el.style.background = `radial-gradient(circle at 35% 30%, #fff 0%, #FFC107 60%, #E53935 100%)`;
+    stage.appendChild(el);
+
+    const lifetime = lerp(LIFETIME_START, LIFETIME_MIN, progress());
+    let expired = false;
+    const target = {
+      cleanup: () => { clearTimeout(target.timer); el.remove(); state.targets.delete(target); },
+    };
+    target.timer = setTimeout(() => {
+      if (expired) return; expired = true;
+      state.misses++;
+      target.cleanup();
+    }, lifetime);
+
+    el.addEventListener("pointerdown", (ev) => {
+      ev.stopPropagation();
+      if (expired) return; expired = true;
+      state.hits++;
+      el.classList.add("hit");
+      clearTimeout(target.timer);
+      setTimeout(() => target.cleanup(), 200);
+      paintHud();
+    });
+
+    state.targets.add(target);
+  }
+
+  function scheduleNextSpawn() {
+    const interval = lerp(SPAWN_START, SPAWN_MIN, progress());
+    state.spawnTimer = setTimeout(() => {
+      if (state.phase !== "playing") return;
+      spawnTarget();
+      scheduleNextSpawn();
+    }, interval);
+  }
+
+  function render() {
+    if (state.phase === "idle") {
+      setStage(centerCard("Whack", "20 seconds. Tap targets before they vanish.<br>Tap to start."), "blue", onTap);
+      showReset(false); return;
+    }
+    if (state.phase === "playing") {
+      // Live HUD; tapping background (not a target) does nothing
+      const hud = `<div class="hud"><span class="pill">20.0s</span><span class="pill">Hits 0</span></div>`;
+      setStage(hud, "dark");
+      paintHud();
+      showReset(true); return;
+    }
+    if (state.phase === "done") {
+      const isNew = saveBest("WHACK", { hits: state.hits }, false);
+      const html = `
+        <div class="summary">
+          <h2>Time!</h2>
+          <div class="row ${isNew ? "new" : ""}">Hits:<span class="v">${state.hits}</span>${isNew ? '<span class="badge">NEW</span>' : ""}</div>
+          <div class="row">Missed:<span class="v">${state.misses}</span></div>
+          <div class="start-cta">Tap to play again</div>
+        </div>`;
+      setStage(html, "dark", () => { game = null; startWhack(); });
+      showReset(true); renderBestLine();
+    }
+  }
+
+  function onTap() {
+    if (state.phase === "idle") {
+      state.phase = "playing";
+      state.startTime = performance.now();
+      render();
+      state.hudTimer = setInterval(paintHud, 100);
+      state.endTimer = setTimeout(() => {
+        state.phase = "done";
+        cleanup();
+        render();
+      }, DURATION_MS);
+      scheduleNextSpawn();
+    }
+  }
+
+  render();
 }
 
-tap.addEventListener("pointerdown", onTap);
-resetBtn.addEventListener("click", resetSession);
+/* =========================================================
+   Dispatch
+   ========================================================= */
+function startCurrentMode() {
+  if      (currentMode === "REACTION") startReaction();
+  else if (currentMode === "GONOGO")   startGoNoGo();
+  else if (currentMode === "WHACK")    startWhack();
+}
 
-render();
+renderModes(false);
+renderBestLine();
+startCurrentMode();
 </script>
 </body>
 </html>
