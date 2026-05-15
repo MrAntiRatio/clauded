@@ -83,11 +83,45 @@
     animation: pop 120ms ease-out forwards;
   }
   .target.hit { animation: bust 220ms ease-out forwards; pointer-events: none; }
+  .target.miss {
+    animation: missShake 360ms ease-out forwards; pointer-events: none;
+    background: radial-gradient(circle at 35% 30%, #fff 0%, #E53935 70%, #7a0000 100%) !important;
+    box-shadow: 0 0 0 6px rgba(229,57,53,0.35), 0 8px 24px rgba(229,57,53,0.4) !important;
+  }
   @keyframes pop { to { transform: translate(-50%, -50%) scale(1); } }
   @keyframes bust {
-    0% { transform: translate(-50%, -50%) scale(1); }
+    0%   { transform: translate(-50%, -50%) scale(1); }
     100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
   }
+  @keyframes missShake {
+    0%   { transform: translate(-50%, -50%) scale(1)    rotate(0); }
+    20%  { transform: translate(-58%, -50%) scale(1.05) rotate(-8deg); }
+    40%  { transform: translate(-42%, -50%) scale(1.05) rotate(8deg); }
+    60%  { transform: translate(-55%, -50%) scale(1)    rotate(-5deg); }
+    80%  { transform: translate(-45%, -50%) scale(0.9)  rotate(3deg); opacity: 0.9; }
+    100% { transform: translate(-50%, -50%) scale(0.6)  rotate(0); opacity: 0; }
+  }
+
+  .floater {
+    position: absolute; pointer-events: none;
+    font-weight: 900; font-size: 22px; letter-spacing: -0.01em;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    transform: translate(-50%, -50%);
+    animation: float 700ms ease-out forwards;
+    white-space: nowrap;
+  }
+  .floater.hit  { color: #FFF59D; }
+  .floater.combo { color: var(--amber); font-size: 16px; }
+  .floater.miss { color: #FF8A80; }
+  @keyframes float {
+    0%   { transform: translate(-50%, -50%) scale(0.6); opacity: 0; }
+    20%  { transform: translate(-50%, -85%) scale(1.15); opacity: 1; }
+    100% { transform: translate(-50%, -160%) scale(1); opacity: 0; }
+  }
+
+  .hud .pill.score { background: rgba(255,193,7,0.18); color: #FFE082; }
+  .hud .pill.combo { background: rgba(255,193,7,0.85); color: #111; }
+
 
   .summary { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px; }
   .summary h2 { margin: 0 0 4px; font-size: 26px; font-weight: 800; }
@@ -142,15 +176,28 @@ let game = null;   // active game instance
 function bestKey(mode) { return `rt_best_${mode}`; }
 function loadBest(mode) {
   const raw = localStorage.getItem(bestKey(mode));
-  return raw ? JSON.parse(raw) : null;
-}
-function saveBest(mode, value, lowerIsBetter) {
-  const cur = loadBest(mode);
-  if (cur == null || (lowerIsBetter ? value < cur : value > cur)) {
-    localStorage.setItem(bestKey(mode), JSON.stringify(value));
-    return true;
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    // Drop legacy whack entries that pre-date scoring
+    if (mode === "WHACK" && (v == null || v.score == null)) {
+      localStorage.removeItem(bestKey(mode));
+      return null;
+    }
+    return v;
+  } catch {
+    localStorage.removeItem(bestKey(mode));
+    return null;
   }
-  return false;
+}
+function saveBest(mode, value, lowerIsBetter, metricFn = (v) => v) {
+  const cur = loadBest(mode);
+  const newMetric = metricFn(value);
+  const curMetric = cur ? metricFn(cur) : null;
+  const better = curMetric == null
+    || (lowerIsBetter ? newMetric < curMetric : newMetric > curMetric);
+  if (better) localStorage.setItem(bestKey(mode), JSON.stringify(value));
+  return better;
 }
 
 function renderModes(disabled) {
@@ -170,7 +217,7 @@ function renderBestLine() {
   if (v == null) { bestEl.textContent = ""; return; }
   if (currentMode === "REACTION") bestEl.textContent = `Best (${MODES.REACTION.name}) — avg: ${v.avg}ms · best: ${v.best}ms`;
   if (currentMode === "GONOGO")   bestEl.textContent = `Best (${MODES.GONOGO.name}) — score: ${v.score} (${v.hits}/${v.trials})`;
-  if (currentMode === "WHACK")    bestEl.textContent = `Best (${MODES.WHACK.name}) — hits: ${v.hits}`;
+  if (currentMode === "WHACK")    bestEl.textContent = `Best (${MODES.WHACK.name}) — score: ${v.score} · combo: ×${v.bestCombo ?? 1} · ${v.accuracy ?? 0}%`;
 }
 
 function setStage(html, classes = "", tapHandler = null) {
@@ -234,7 +281,7 @@ function startReaction() {
       const avg = Math.round(state.rounds.reduce((a,b)=>a+b,0) / state.rounds.length);
       const prev = loadBest("REACTION");
       const isNew = !prev || avg < prev.avg;
-      if (isNew) saveBest("REACTION", { avg, best }, true);
+      if (isNew) saveBest("REACTION", { avg, best }, true, v => v.avg);
       const allTime = loadBest("REACTION");
       const html = `
         <div class="summary">
@@ -325,7 +372,7 @@ function startGoNoGo() {
     if (state.phase === "done") {
       const s = score();
       const trials = state.hits + state.misses + state.falseAlarms + state.correctRejects;
-      const isNew = saveBest("GONOGO", { score: s, hits: state.hits, trials }, false);
+      const isNew = saveBest("GONOGO", { score: s, hits: state.hits, trials }, false, v => v.score);
       const avgRT = state.rts.length ? Math.round(state.rts.reduce((a,b)=>a+b,0)/state.rts.length) : "—";
       const html = `
         <div class="summary">
@@ -394,38 +441,54 @@ function startGoNoGo() {
    Tap them before they expire. Score = hits.
    ========================================================= */
 function startWhack() {
-  const DURATION_MS = 20000;
-  const SPAWN_START = 850;
-  const SPAWN_MIN = 380;
+  const DURATION_MS  = 20000;
+  const SPAWN_START  = 850;
+  const SPAWN_MIN    = 360;
   const LIFETIME_START = 1200;
-  const LIFETIME_MIN = 650;
+  const LIFETIME_MIN   = 600;
+  const BASE_POINTS  = 50;
+  const SPEED_BONUS  = 150;       // up to +150 for instantaneous taps
+  const MAX_COMBO    = 9;         // multiplier capped at x10
 
   const state = {
-    phase: "idle",   // idle | playing | done
-    hits: 0,
-    misses: 0,
+    phase: "idle",
+    hits: 0, misses: 0,
+    score: 0, combo: 0, bestCombo: 0,
     startTime: 0,
-    spawnTimer: null,
-    endTimer: null,
-    hudTimer: null,
+    spawnTimer: null, endTimer: null, hudTimer: null,
     targets: new Set(),
   };
 
   function cleanup() {
-    clearTimeout(state.spawnTimer); clearTimeout(state.endTimer); clearInterval(state.hudTimer);
+    clearTimeout(state.spawnTimer);
+    clearTimeout(state.endTimer);
+    clearInterval(state.hudTimer);
     state.targets.forEach(t => t.cleanup && t.cleanup());
     state.targets.clear();
   }
   game = { cleanup };
 
-  function lerp(a, b, t) { return a + (b - a) * t; }
-  function progress() { return Math.min(1, (performance.now() - state.startTime) / DURATION_MS); }
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const progress = () => Math.min(1, (performance.now() - state.startTime) / DURATION_MS);
 
   function paintHud() {
     const remain = Math.max(0, DURATION_MS - (performance.now() - state.startTime));
     const seconds = (remain / 1000).toFixed(1);
     const hud = stage.querySelector(".hud");
-    if (hud) hud.innerHTML = `<span class="pill">${seconds}s</span><span class="pill">Hits ${state.hits}</span>`;
+    if (!hud) return;
+    const comboPill = state.combo > 1
+      ? `<span class="pill combo">×${state.combo} COMBO</span>` : "";
+    hud.innerHTML = `<span class="pill">${seconds}s</span>${comboPill}<span class="pill score">${state.score}</span>`;
+  }
+
+  function spawnFloater(x, y, text, kind) {
+    const el = document.createElement("div");
+    el.className = `floater ${kind}`;
+    el.style.left = x + "px";
+    el.style.top  = y + "px";
+    el.textContent = text;
+    stage.appendChild(el);
+    setTimeout(() => el.remove(), 720);
   }
 
   function spawnTarget() {
@@ -433,34 +496,55 @@ function startWhack() {
     const margin = 50;
     const x = margin + Math.random() * (rect.width - margin * 2);
     const y = 70 + Math.random() * (rect.height - 120);
-    const size = 60 + Math.random() * 24;
+    const size = 58 + Math.random() * 26;
     const el = document.createElement("div");
     el.className = "target";
     el.style.left = x + "px";
-    el.style.top = y + "px";
+    el.style.top  = y + "px";
     el.style.width = size + "px";
     el.style.height = size + "px";
-    el.style.background = `radial-gradient(circle at 35% 30%, #fff 0%, #FFC107 60%, #E53935 100%)`;
+    el.style.background = "radial-gradient(circle at 35% 30%, #fff 0%, #FFC107 60%, #E53935 100%)";
     stage.appendChild(el);
 
     const lifetime = lerp(LIFETIME_START, LIFETIME_MIN, progress());
-    let expired = false;
+    const bornAt = performance.now();
+    let resolved = false;
     const target = {
       cleanup: () => { clearTimeout(target.timer); el.remove(); state.targets.delete(target); },
     };
+
     target.timer = setTimeout(() => {
-      if (expired) return; expired = true;
+      if (resolved) return; resolved = true;
+      // Miss: target expired
       state.misses++;
-      target.cleanup();
+      const wasCombo = state.combo;
+      state.combo = 0;
+      el.classList.add("miss");
+      spawnFloater(x, y, "MISS", "miss");
+      if (wasCombo > 1) spawnFloater(x, y + 22, `× broken`, "miss");
+      clearTimeout(target.timer);
+      setTimeout(() => target.cleanup(), 360);
+      paintHud();
     }, lifetime);
 
     el.addEventListener("pointerdown", (ev) => {
       ev.stopPropagation();
-      if (expired) return; expired = true;
+      if (resolved) return; resolved = true;
+      const elapsed = performance.now() - bornAt;
+      const speedRatio = Math.max(0, 1 - elapsed / lifetime);    // 1 = instant, 0 = last possible ms
+      const points = Math.round(BASE_POINTS + SPEED_BONUS * speedRatio);
+      const multiplier = state.combo + 1;
+      const gained = points * multiplier;
       state.hits++;
+      state.score += gained;
+      state.combo = Math.min(state.combo + 1, MAX_COMBO);
+      if (state.combo > state.bestCombo) state.bestCombo = state.combo;
+
       el.classList.add("hit");
+      spawnFloater(x, y, `+${gained}`, "hit");
+      if (multiplier > 1) spawnFloater(x, y + 24, `×${multiplier}`, "combo");
       clearTimeout(target.timer);
-      setTimeout(() => target.cleanup(), 200);
+      setTimeout(() => target.cleanup(), 220);
       paintHud();
     });
 
@@ -478,23 +562,32 @@ function startWhack() {
 
   function render() {
     if (state.phase === "idle") {
-      setStage(centerCard("Whack", "20 seconds. Tap targets before they vanish.<br>Tap to start."), "blue", onTap);
+      setStage(centerCard("Whack",
+        "20 seconds. Tap targets fast for big points.<br>Chain hits to build a combo. Misses break it.<br>Tap to start."),
+        "blue", onTap);
       showReset(false); return;
     }
     if (state.phase === "playing") {
-      // Live HUD; tapping background (not a target) does nothing
-      const hud = `<div class="hud"><span class="pill">20.0s</span><span class="pill">Hits 0</span></div>`;
+      const hud = `<div class="hud"><span class="pill">20.0s</span><span class="pill score">0</span></div>`;
       setStage(hud, "dark");
       paintHud();
       showReset(true); return;
     }
     if (state.phase === "done") {
-      const isNew = saveBest("WHACK", { hits: state.hits }, false);
+      const totalAttempts = state.hits + state.misses;
+      const accuracy = totalAttempts ? Math.round((state.hits / totalAttempts) * 100) : 0;
+      const isNew = saveBest("WHACK", {
+        score: state.score, hits: state.hits, misses: state.misses,
+        bestCombo: state.bestCombo, accuracy,
+      }, false, v => v.score ?? 0);
       const html = `
         <div class="summary">
           <h2>Time!</h2>
-          <div class="row ${isNew ? "new" : ""}">Hits:<span class="v">${state.hits}</span>${isNew ? '<span class="badge">NEW</span>' : ""}</div>
+          <div class="row ${isNew ? "new" : ""}">Score:<span class="v">${state.score}</span>${isNew ? '<span class="badge">NEW</span>' : ""}</div>
+          <div class="row">Hits:<span class="v">${state.hits}</span></div>
           <div class="row">Missed:<span class="v">${state.misses}</span></div>
+          <div class="row">Best combo:<span class="v">×${state.bestCombo}</span></div>
+          <div class="row">Accuracy:<span class="v">${accuracy}%</span></div>
           <div class="start-cta">Tap to play again</div>
         </div>`;
       setStage(html, "dark", () => { game = null; startWhack(); });
