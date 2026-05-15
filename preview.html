@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Reflex Timer — Preview</title>
+<style>
+  :root {
+    --bg: #0E1116;
+    --surface: #1A1F27;
+    --on: #E7ECF3;
+    --muted: #9AA4B2;
+    --primary: #1E5BFF;
+    --primary-dark: #0B2C8C;
+    --red: #E53935;
+    --green: #00C853;
+    --amber: #FFC107;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--on);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overscroll-behavior: none; user-select: none; -webkit-user-select: none; }
+  .device {
+    max-width: 420px; margin: 0 auto; height: 100dvh; display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  header { padding: 16px 20px 8px; }
+  h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; }
+  .reset {
+    background: transparent; border: 0; color: var(--primary);
+    font-size: 14px; font-weight: 600; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .reset:active { background: rgba(30,91,255,0.15); }
+  .reset[hidden] { display: none; }
+  main { flex: 1; padding: 8px 16px; min-height: 0; }
+  .tap {
+    width: 100%; height: 100%; border-radius: 28px; display: flex; align-items: center;
+    justify-content: center; text-align: center; padding: 24px;
+    background: var(--primary); color: white; transition: background-color 0.12s ease;
+    cursor: pointer;
+  }
+  .tap.waiting { background: var(--red); }
+  .tap.go { background: var(--green); }
+  .tap.toosoon { background: var(--amber); color: #111; }
+  .tap.complete { background: var(--primary-dark); }
+  .title { font-size: 44px; font-weight: 800; letter-spacing: -0.02em; }
+  .title.big { font-size: 80px; }
+  .title.mid { font-size: 56px; }
+  .body { font-size: 16px; opacity: 0.9; margin-top: 12px; }
+  .summary { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .summary h2 { margin: 0 0 8px; font-size: 28px; font-weight: 800; }
+  .stat { font-size: 18px; }
+  .stat .v { font-size: 22px; font-weight: 700; margin-left: 8px; }
+  .stat.new .v { color: var(--amber); font-weight: 900; }
+  .badge { background: var(--amber); color: #111; font-weight: 900; font-size: 12px;
+    padding: 2px 6px; border-radius: 6px; margin-left: 6px; vertical-align: middle; }
+  .all-time { font-size: 13px; opacity: 0.7; margin-top: 6px; }
+  footer { padding: 14px 20px 20px; }
+  .label { color: var(--muted); font-size: 13px; font-weight: 600; margin: 8px 0 6px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid rgba(255,255,255,0.15); background: transparent; color: var(--on);
+    padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  .chip.selected { background: var(--primary); border-color: var(--primary); color: white; }
+  .chip:disabled { opacity: 0.5; cursor: not-allowed; }
+  .best { color: var(--muted); font-size: 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="device">
+  <header>
+    <div class="header-row">
+      <h1>Reflex Timer</h1>
+      <button class="reset" id="reset" hidden>Reset</button>
+    </div>
+    <div class="sub" id="round-label">Round 1 of 5</div>
+  </header>
+  <main>
+    <div class="tap" id="tap"></div>
+  </main>
+  <footer>
+    <div class="label">Difficulty</div>
+    <div class="chips" id="difficulty"></div>
+    <div class="label">Rounds per session</div>
+    <div class="chips" id="rounds"></div>
+    <div class="best" id="best"></div>
+  </footer>
+</div>
+
+<script>
+const DIFFICULTIES = {
+  EASY:   { name: "Easy",   min: 1500, max: 4500 },
+  NORMAL: { name: "Normal", min: 1000, max: 3500 },
+  HARD:   { name: "Hard",   min:  700, max: 2500 },
+  INSANE: { name: "Insane", min:  400, max: 1800 },
+};
+const ROUND_OPTIONS = [3, 5, 10];
+
+const state = {
+  difficulty: "NORMAL",
+  targetRounds: 5,
+  rounds: [],
+  phase: { kind: "idle" },
+  waitTimer: null,
+};
+
+function loadBest(diff) {
+  const r = Number(localStorage.getItem(`best_reaction_${diff}`)) || null;
+  const a = Number(localStorage.getItem(`best_average_${diff}`)) || null;
+  return { reaction: r || null, average: a || null };
+}
+function saveBest(diff, sessionBest, sessionAvg) {
+  const cur = loadBest(diff);
+  let newR = false, newA = false;
+  if (sessionBest != null && (cur.reaction == null || sessionBest < cur.reaction)) {
+    localStorage.setItem(`best_reaction_${diff}`, sessionBest); newR = true;
+  }
+  if (sessionAvg != null && (cur.average == null || sessionAvg < cur.average)) {
+    localStorage.setItem(`best_average_${diff}`, sessionAvg); newA = true;
+  }
+  return { newR, newA };
+}
+
+const tap = document.getElementById("tap");
+const resetBtn = document.getElementById("reset");
+const roundLabel = document.getElementById("round-label");
+const bestEl = document.getElementById("best");
+const diffChips = document.getElementById("difficulty");
+const roundChips = document.getElementById("rounds");
+
+function renderChips() {
+  const controlsEnabled = ["idle", "toosoon", "session"].includes(state.phase.kind);
+  diffChips.innerHTML = "";
+  Object.entries(DIFFICULTIES).forEach(([key, d]) => {
+    const b = document.createElement("button");
+    b.className = "chip" + (state.difficulty === key ? " selected" : "");
+    b.textContent = d.name;
+    b.disabled = !controlsEnabled;
+    b.onclick = () => { if (controlsEnabled) { state.difficulty = key; resetSession(); render(); } };
+    diffChips.appendChild(b);
+  });
+  roundChips.innerHTML = "";
+  ROUND_OPTIONS.forEach(n => {
+    const b = document.createElement("button");
+    b.className = "chip" + (state.targetRounds === n ? " selected" : "");
+    b.textContent = n;
+    b.disabled = !controlsEnabled;
+    b.onclick = () => { if (controlsEnabled) { state.targetRounds = n; resetSession(); render(); } };
+    roundChips.appendChild(b);
+  });
+}
+
+function renderBestLine() {
+  const b = loadBest(state.difficulty);
+  if (b.reaction == null && b.average == null) { bestEl.textContent = ""; return; }
+  const parts = [];
+  if (b.reaction != null) parts.push(`reaction: ${b.reaction}ms`);
+  if (b.average  != null) parts.push(`avg: ${b.average}ms`);
+  bestEl.textContent = `Best (${DIFFICULTIES[state.difficulty].name}) — ${parts.join(" · ")}`;
+}
+
+function render() {
+  tap.className = "tap";
+  const p = state.phase;
+  const idx = Math.min(state.rounds.length + 1, state.targetRounds);
+  roundLabel.textContent = `Round ${idx} of ${state.targetRounds}`;
+  resetBtn.hidden = p.kind === "idle" && state.rounds.length === 0;
+  renderChips();
+  renderBestLine();
+
+  if (p.kind === "idle") {
+    tap.innerHTML = `<div><div class="title">Tap to start</div>
+      <div class="body">When the screen turns green, tap as fast as you can.</div></div>`;
+  } else if (p.kind === "waiting") {
+    tap.classList.add("waiting");
+    tap.innerHTML = `<div><div class="title">Wait for green…</div>
+      <div class="body">Don't tap yet!</div></div>`;
+  } else if (p.kind === "go") {
+    tap.classList.add("go");
+    tap.innerHTML = `<div><div class="title big">TAP!</div></div>`;
+  } else if (p.kind === "toosoon") {
+    tap.classList.add("toosoon");
+    tap.innerHTML = `<div><div class="title">Too soon!</div>
+      <div class="body">Tap to try this round again.</div></div>`;
+  } else if (p.kind === "round") {
+    tap.classList.add("complete");
+    tap.innerHTML = `<div><div class="title mid">${p.ms} ms</div>
+      <div class="body">Tap for next round</div></div>`;
+  } else if (p.kind === "session") {
+    tap.classList.add("complete");
+    const avg = p.average, best = p.best;
+    const all = loadBest(state.difficulty);
+    const allLine = (all.reaction != null || all.average != null)
+      ? `<div class="all-time">All-time best ${all.reaction != null ? `reaction: ${all.reaction}ms` : ""}${(all.reaction != null && all.average != null) ? " · " : ""}${all.average != null ? `avg: ${all.average}ms` : ""}</div>` : "";
+    tap.innerHTML = `<div class="summary"><h2>Session complete</h2>
+      <div class="stat ${p.newA ? "new" : ""}">Average:<span class="v">${avg != null ? avg + " ms" : "—"}</span>${p.newA ? '<span class="badge">NEW</span>' : ""}</div>
+      <div class="stat ${p.newR ? "new" : ""}">Best:<span class="v">${best != null ? best + " ms" : "—"}</span>${p.newR ? '<span class="badge">NEW</span>' : ""}</div>
+      ${allLine}<div class="body">Tap to play again</div></div>`;
+  }
+}
+
+function cancelWait() { if (state.waitTimer) { clearTimeout(state.waitTimer); state.waitTimer = null; } }
+
+function startWaiting() {
+  cancelWait();
+  state.phase = { kind: "waiting" };
+  render();
+  const d = DIFFICULTIES[state.difficulty];
+  const delay = Math.floor(d.min + Math.random() * (d.max - d.min));
+  state.waitTimer = setTimeout(() => {
+    if (state.phase.kind === "waiting") {
+      state.phase = { kind: "go", start: performance.now() };
+      render();
+    }
+  }, delay);
+}
+
+function resetSession() {
+  cancelWait();
+  state.rounds = [];
+  state.phase = { kind: "idle" };
+  render();
+}
+
+function finishSession() {
+  const best = Math.min(...state.rounds);
+  const average = Math.round(state.rounds.reduce((a,b) => a+b, 0) / state.rounds.length);
+  const { newR, newA } = saveBest(state.difficulty, best, average);
+  state.phase = { kind: "session", best, average, newR, newA };
+  render();
+}
+
+function onTap() {
+  const p = state.phase;
+  if (p.kind === "idle" || p.kind === "toosoon") { startWaiting(); return; }
+  if (p.kind === "waiting") {
+    cancelWait();
+    state.phase = { kind: "toosoon" };
+    render();
+    return;
+  }
+  if (p.kind === "go") {
+    const ms = Math.round(performance.now() - p.start);
+    state.rounds.push(ms);
+    if (state.rounds.length >= state.targetRounds) finishSession();
+    else { state.phase = { kind: "round", ms }; render(); }
+    return;
+  }
+  if (p.kind === "round") { startWaiting(); return; }
+  if (p.kind === "session") { resetSession(); return; }
+}
+
+tap.addEventListener("pointerdown", onTap);
+resetBtn.addEventListener("click", resetSession);
+
+render();
+</script>
+</body>
+</html>
